@@ -1,34 +1,68 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useRef, useEffect } from 'react'
+import { useInfiniteQuery } from '@tanstack/react-query'
+
+const fetchProducts = async ({ pageParam = 0 }) => {
+  const limit = 10
+  const res = await fetch(`https://dummyjson.com/products?limit=${limit}&skip=${pageParam}`)
+  return res.json()
+}
 
 function App() {
-  const [count, setCount] = useState(0)
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['products'],
+    queryFn: fetchProducts,
+    getNextPageParam: (lastPage, allPages) => {
+      const limit = 10
+      const nextSkip = allPages.length * limit
+      return nextSkip >= lastPage.total ? undefined : nextSkip
+    },
+  })
+
+  const observerRef = useRef()
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage()
+      }
+    })
+
+    if (observerRef.current) {
+      observer.observe(observerRef.current)
+    }
+
+    return () => {
+      if (observerRef.current) {
+        observer.unobserve(observerRef.current)
+      }
+    }
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
+
+  const allProducts = data?.pages.flatMap(p => p.products) || []
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div>
+      <h1 className='text-2xl mb-4'>Mahsulotlar</h1>
+
+      <div className='w-full h-max flex gap-5 flex-wrap'>
+        {allProducts.map(product => (
+          <div className='w-70 h-50 border flex flex-col justify-center items-center' key={product.id}>
+            <img className='w-full h-30' src={product.thumbnail} alt="" />
+            <h1>{product.title}</h1>
+          </div>
+        ))}
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
+
+      {/* Bu div pastga tushilganda yangi sahifa yuklanadi */}
+      <div ref={observerRef} className='h-10 flex justify-center items-center'>
+        {isFetchingNextPage && <p>Yuklanmoqda...</p>}
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    </div>
   )
 }
 
